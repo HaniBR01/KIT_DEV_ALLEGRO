@@ -10,7 +10,7 @@
 
 #define NUM_PRATOS 8
 
-const float FPS = 60;  
+const float FPS = 100;  
 
 const int SCREEN_W = 960;
 const int SCREEN_H = 540;
@@ -26,58 +26,32 @@ const float PRATO_W = 50;
 const float PRATO_H = 10;
 
 typedef struct Jogador {
-	
 	float x;
 	int equilibrando;
+	int power;
 	int mov_esq, mov_dir;
 	ALLEGRO_COLOR cor;
 	float vel;
-	
 } Jogador;
-
 typedef struct Haste {
 	float x;
 	float y;
-	ALLEGRO_COLOR cor;
-	// x = n * SCREEN_W / 9
+	// x = (n+1) * SCREEN_W / 9
 	// y = SREEN_H - JOGADOR_H - HASTE_H/2
 }Haste;
-
 typedef struct Prato {
 	float x;
 	float y;
-	int indice;
-	/* um valor entre 0 e 255, em que 0 = prato equilibrado e
-	   1 = prato com maxima energia, prestes a cair */
+	int indice; //um indice virtual para desenhar os pratos de forma distribuida
 	float energia;
 	float tempoParaAparecer;
-	
 } Prato;
-void desnha_haste(){}
-void inicializa_hastes(Haste hastes[]){
-	int i;
-	for(i=0;i<NUM_PRATOS;i++){
-		hastes[i].x = (i+1)*SCREEN_W/(NUM_PRATOS+1);
-		hastes[i].y = SCREEN_H - JOGADOR_H - HASTE_H/2;
-		hastes[i].cor = al_map_rgb(255, 255, 255);
-	}
-}
 
-int equilibra(Haste h, Jogador j){
-	if((j.equilibrando>0) && (j.x>h.x-HASTE_W/2)&&(j.x<h.x+HASTE_W/2))
-		return 255;
+int equilibra(float x, Jogador *j,int max){
+	if((j->equilibrando==1) && (j->x>x-HASTE_W/2)&&(j->x<x+HASTE_W/2) && (max))
+		return 1;
 	else
-		return 100;
-}
-
-void desenha_haste(Haste h[],Jogador j){
-	int i;
-	for(i=0;i<NUM_PRATOS;i++)
-	al_draw_filled_rectangle(h[i].x-HASTE_W/2,
-							h[i].y-HASTE_H/2,
-							h[i].x+HASTE_W/2,
-							h[i].y+HASTE_H/2,
-							al_map_rgb(100,100, equilibra(h[i],j)));
+		return 0;
 }
 
 void desenha_cenario() {
@@ -88,6 +62,28 @@ void desenha_cenario() {
 	
 }
 
+void inicializa_hastes(Haste hastes[]){
+	int i;
+	for(i=0;i<NUM_PRATOS;i++){
+		hastes[i].x = (i+1)*SCREEN_W/(NUM_PRATOS+1);
+		hastes[i].y = SCREEN_H - JOGADOR_H - HASTE_H/2;
+	}
+}
+void desenha_haste(Haste h[],Jogador *j, int max){
+	int i, cor;
+	for(i=0;i<NUM_PRATOS;i++){
+		if(equilibra(h[i].x,j,max))
+			cor = 255;
+		else
+			cor = 100;
+	al_draw_filled_rectangle(h[i].x-HASTE_W/2,
+							h[i].y-HASTE_H/2,
+							h[i].x+HASTE_W/2,
+							h[i].y+HASTE_H/2,
+							al_map_rgb(100,100, cor));
+	}
+}
+
 void desenha_jogador(Jogador j) {
 	
 	al_draw_filled_triangle(j.x, SCREEN_H - JOGADOR_H, 
@@ -96,8 +92,7 @@ void desenha_jogador(Jogador j) {
 							j.cor);	
 	
 }
-
-void atualizaJogador(Jogador *j) {
+void atualiza_jogador(Jogador *j) {
 	if(j->mov_esq) {
 		if(j->x - j->vel > 0+JOGADOR_W/2)
 			j->x -= j->vel;
@@ -107,21 +102,20 @@ void atualizaJogador(Jogador *j) {
 			j->x += j->vel;
 	}	
 }
-
-void InicializaJogador(Jogador *j) {
+void inicializa_jogador(Jogador *j) {
 	j->x = SCREEN_W / 2;
 	j->equilibrando = 0;
 	j->cor = al_map_rgb(45, 123, 34);
 	j->mov_esq = 0;
 	j->mov_dir = 0;
 	j->vel = 1;
+	j->power =1;
 }
 
-float geraTempoPrato(int i) {
+float gera_tempo_prato(int i) {
 	return i*1200;
 }
-
-void inicializaPratos(Prato pratos[]) {
+void inicializa_pratos(Prato pratos[]) {
 	int i;
 	for(i=0;i<NUM_PRATOS;i++)
 		if(i%2==NUM_PRATOS%2){
@@ -133,48 +127,56 @@ void inicializaPratos(Prato pratos[]) {
 	for(i=0; i<NUM_PRATOS; i++) {
 		pratos[i].x = pratos[i].indice*SCREEN_W/(NUM_PRATOS+1);
 		pratos[i].y = SCREEN_H-HASTE_H-JOGADOR_H-PRATO_H/2;
-		pratos[i].tempoParaAparecer = geraTempoPrato(i);
+		pratos[i].tempoParaAparecer = gera_tempo_prato(i);
 		pratos[i].energia = 0;
 	}
 }
-
-void desenhaPratos(Prato pratos[],ALLEGRO_TIMER* timer){
+void desenha_pratos(Prato pratos[]){
 	int i=0;
-		for(i=0;i<NUM_PRATOS;i++){	
-		if(pratos[i].tempoParaAparecer<=al_get_timer_count(timer))
-			al_draw_filled_rectangle(pratos[i].x-PRATO_W/2,
+		for(i=0;i<NUM_PRATOS;i++)
+			if(pratos[i].tempoParaAparecer==0)
+				al_draw_filled_rectangle(pratos[i].x-PRATO_W/2,
 							pratos[i].y-PRATO_H/2,
 							pratos[i].x+PRATO_W/2,
 							pratos[i].y+PRATO_H/2,
 							al_map_rgb(255, (255-pratos[i].energia), (255-pratos[i].energia)));
-		}
 }
-
-void atualizaPratos(Prato pratos[],ALLEGRO_TIMER* timer,Jogador j){
+void aumenta_energia(Prato pratos[]){
+	int i;
+	for(i=0;i<NUM_PRATOS;i++)
+		if((pratos[i].tempoParaAparecer==0) && (pratos[i].energia<255.0))
+			pratos[i].energia += 6*(1/FPS);
+}
+void atualiza_pratos(Prato pratos[],Jogador *j){
 	int i;
 	for(i=0;i<NUM_PRATOS;i++){
-		if(pratos[i].energia>=255.0){
+		if(pratos[i].tempoParaAparecer>0)
+			pratos[i].tempoParaAparecer--;
+		if(pratos[i].energia>=255.0)
 			pratos[i].y+=1;
-		}
-		if((pratos[i].tempoParaAparecer<=al_get_timer_count(timer)) && (pratos[i].energia<255.0)){
-			pratos[i].energia += 0.1;
-		}
-		if((j.equilibrando>0) && (pratos[i].energia-0.5>0.0) && (pratos[i].energia<255.0) && (j.x>pratos[i].x-HASTE_W/2)&&(j.x<pratos[i].x+HASTE_W/2)){
-			pratos[i].energia-=0.5;
-		}
 	}
 }
+void equilibra_prato(Prato pratos[], Jogador *j,int max){
+	int i;
+	for(i=0;i<NUM_PRATOS;i++)
+		if((pratos[i].energia-(30*(1/FPS))>0.0) && equilibra(pratos[i].x,j,max))
+			pratos[i].energia-= 30*(1/FPS);
+}
+void recuperar_todos_pratos(Prato pratos[]){
+	int i;
+	for(i=0;i<NUM_PRATOS;i++)
+		pratos[i].energia=0;
+}
 
-int caiuPrato(Prato pratos[]){
+int prato_caiu(Prato pratos[]){
 	int i;
 	for(i=0;i<NUM_PRATOS;i++){
 		if(pratos[i].y>SCREEN_H-PRATO_H/2)
 			return 1;
 	}
 	return 0;
-}
- 
-int energiaPrato(Prato pratos[]){
+} 
+int energia_prato_max(Prato pratos[]){
 	int i;
 	for(i=0;i<NUM_PRATOS;i++){
 		if(pratos[i].energia>=255)
@@ -192,13 +194,9 @@ int main(int argc, char **argv){
 	FILE *arquivo;
 	long long int recorde;
 	arquivo = fopen("platesScore.txt","r");
-	if (arquivo == NULL) {
+	if (arquivo == NULL)
       	printf("Erro ao abrir o arquivo.\n");
-  	}
 	fscanf(arquivo,"%lld",&recorde);
-	if(recorde == EOF){
-		recorde = 0;
-	}
 	fclose(arquivo);
 
 	//inicializa o Allegro
@@ -255,7 +253,6 @@ int main(int argc, char **argv){
 		fprintf(stderr, "font file does not exist or cannot be accessed!\n");
 	}	
 	
-	
  	//cria a fila de eventos
 	event_queue = al_create_event_queue();
 	if(!event_queue) {
@@ -275,14 +272,14 @@ int main(int argc, char **argv){
 	
 	//JOGADOR
 	Jogador jogador;
-	InicializaJogador(&jogador);
+	inicializa_jogador(&jogador);
 	
 	//PRATOS
 	Haste hastes[NUM_PRATOS];
 	inicializa_hastes(hastes);
 
 	Prato pratos[NUM_PRATOS];
-	inicializaPratos(pratos);
+	inicializa_pratos(pratos);
 	
 	long long int score=0;
 	char scoreS[50];
@@ -300,42 +297,35 @@ int main(int argc, char **argv){
 		//se o tipo de evento for um evento do temporizador, ou seja, se o tempo passou de t para t+1
 		if(ev.type == ALLEGRO_EVENT_TIMER) {
 			
-			if(energiaPrato(pratos))
-				score++;
-		
 			desenha_cenario();
 			
-			if(energiaPrato(pratos)){
+			if(energia_prato_max(pratos)){
+				score++;
 				sprintf(scoreS,"%lld",score);
-				al_draw_text(size_32,al_map_rgb(255,0,0),50.0,50.0,NULL,scoreS);
+				al_draw_text(size_32,al_map_rgb(255,0,0),50.0,50.0,ALLEGRO_ALIGN_LEFT,scoreS);
 			}
-			if(energiaPrato(pratos))
-				atualizaJogador(&jogador);
-
-			desenha_haste(hastes,jogador);
+			sprintf(scoreS,"B to Recover all :%d",jogador.power);
+			if(jogador.power && energia_prato_max(pratos))
+				al_draw_text(size_32,al_map_rgb(255,0,0),900.0,50.0,ALLEGRO_ALIGN_RIGHT,scoreS);
 			
+			desenha_haste(hastes,&jogador,energia_prato_max(pratos));
+			
+			if(energia_prato_max(pratos))
+				atualiza_jogador(&jogador);
 			desenha_jogador(jogador);	
 
-			atualizaPratos(pratos,timer,jogador);
-			
-			desenhaPratos(pratos,timer);
+			atualiza_pratos(pratos,&jogador);
+			aumenta_energia(pratos);
+			equilibra_prato(pratos, &jogador,energia_prato_max(pratos));
+			desenha_pratos(pratos);
 
-			playing = !caiuPrato(pratos);
+			playing = !prato_caiu(pratos);
 			
-			if(!energiaPrato(pratos)){
+			if(!energia_prato_max(pratos)){
 				sprintf(scoreS,"Score: %lld",score);
 				al_draw_text(size_32,al_map_rgb(255,0,0),SCREEN_W/2,50.0,ALLEGRO_ALIGN_CENTRE,scoreS);
-				if(score>recorde){
-					recorde=score;
-				}
 				sprintf(scoreS,"Recorde: %lld",recorde);
 				al_draw_text(size_32,al_map_rgb(255,0,0),SCREEN_W/2,100.0,ALLEGRO_ALIGN_CENTRE,scoreS);			
-				arquivo = fopen("platesScore.txt","w");
-				if (arquivo == NULL) {
-					printf("Erro ao abrir o arquivo.\n");
-				}
-				fprintf(arquivo,"%lld",recorde);
-				fclose(arquivo);
 			}
 
 			//atualiza a tela (quando houver algo para mostrar)
@@ -355,7 +345,7 @@ int main(int argc, char **argv){
 			
 			if(ev.keyboard.keycode == ALLEGRO_KEY_SPACE) {
 				if(!jogador.mov_dir && !jogador.mov_esq)
-				jogador.equilibrando = 5;
+				jogador.equilibrando = 1;
 			}
 			else if(ev.keyboard.keycode == ALLEGRO_KEY_D) {
 				jogador.mov_dir = 1;
@@ -364,6 +354,12 @@ int main(int argc, char **argv){
 			else if(ev.keyboard.keycode == ALLEGRO_KEY_A){
 				jogador.mov_esq = 1;
 				jogador.equilibrando = 0;
+			}
+			else if(ev.keyboard.keycode == ALLEGRO_KEY_B){
+				if(energia_prato_max(pratos)&&jogador.power==1){
+					jogador.power = 0;
+					recuperar_todos_pratos(pratos);
+				}
 			}
 		}
 		//se o tipo de evento for soltar uma tecla
@@ -381,6 +377,14 @@ int main(int argc, char **argv){
 		}		
 			
 	}
+	
+	if(score>recorde)
+		recorde=score;
+	arquivo = fopen("platesScore.txt","w");
+	if (arquivo == NULL)
+		printf("Erro ao abrir o arquivo.\n");
+	fprintf(arquivo,"%lld",recorde);
+	fclose(arquivo);
 
 	al_destroy_timer(timer);
 	al_destroy_display(display);
